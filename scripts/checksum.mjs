@@ -1,13 +1,14 @@
-import { readFileSync, readdirSync, writeFileSync } from 'fs'
+import { readdirSync, readFileSync, writeFileSync } from 'fs'
 import { createHash } from 'crypto'
-const files = readdirSync('dist')
+
+const targets = process.argv.slice(2)
+const files =
+  targets.length > 0
+    ? readdirSync('dist').filter((f) => targets.some((ext) => f.endsWith(ext)))
+    : readdirSync('dist').filter((f) => !f.endsWith('.sha256') && !f.endsWith('.yml'))
 
 for (const file of files) {
-  for (const ext of process.argv.slice(2)) {
-    if (file.endsWith(ext)) {
-      const content = readFileSync(`dist/${file}`)
-      const checksum = createHash('sha256').update(content, 'utf8').digest('hex')
-      writeFileSync(`dist/${file}.sha256`, checksum)
-    }
-  }
+  const content = readFileSync(`dist/${file}`)
+  const checksum = createHash('sha256').update(content).digest('hex')
+  writeFileSync(`dist/${file}.sha256`, checksum)
 }
