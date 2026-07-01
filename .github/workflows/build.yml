@@ -629,7 +629,7 @@ jobs:
           allow_empty_commits: false
 
   aur-git-updater:
-    if: startsWith(github.ref, 'refs/heads/')
+    if: startsWith(github.ref, 'refs/heads/') && github.repository == 'mihomo-party-org/clash-party'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
