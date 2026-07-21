@@ -10,7 +10,10 @@ export interface AggregatedData {
   count: number
 }
 
-function aggregateLogsByType(logs: DataUsageLog[], type: DataUsageType): AggregatedData[] {
+function aggregateLogsByType(
+  logs: DataUsageLog[],
+  type: DataUsageType
+): AggregatedData[] {
   const map = new Map<string, AggregatedData>()
 
   for (const log of logs) {
@@ -73,17 +76,15 @@ export async function getTrafficData(
   type: DataUsageType,
   startTime: number,
   endTime: number,
-  bucketSizeMs: number,
-  sourceIP?: string
+  bucketSizeMs: number
 ): Promise<{
   rankings: AggregatedData[]
   trend: { timestamp: number; upload: number; download: number }[]
 }> {
   const logs = await db.query(startTime, endTime)
-  const filtered = sourceIP ? logs.filter((l) => l.sourceIP === sourceIP) : logs
   return {
-    rankings: aggregateLogsByType(filtered, type),
-    trend: computeTrend(filtered, startTime, endTime, bucketSizeMs)
+    rankings: aggregateLogsByType(logs, type),
+    trend: computeTrend(logs, startTime, endTime, bucketSizeMs)
   }
 }
 
@@ -100,18 +101,16 @@ export async function getSubStatsByHost(
   dimension: Exclude<DataUsageType, 'host'>,
   label: string,
   startTime: number,
-  endTime: number,
-  sourceIP?: string
+  endTime: number
 ): Promise<AggregatedData[]> {
   const logs = await db.query(startTime, endTime)
-  const filtered = logs.filter((log) => {
-    if (sourceIP && log.sourceIP !== sourceIP) return false
-    return dimension === 'sourceIP'
+  const filtered = logs.filter((log) =>
+    dimension === 'sourceIP'
       ? log.sourceIP === label
       : dimension === 'outbound'
         ? log.outbound === label
         : log.process === label
-  })
+  )
 
   const map = new Map<string, AggregatedData>()
   for (const log of filtered) {
@@ -170,13 +169,11 @@ export async function getProxyStatsByHost(
   parentLabel: string,
   host: string,
   startTime: number,
-  endTime: number,
-  sourceIP?: string
+  endTime: number
 ): Promise<AggregatedData[]> {
   const logs = await db.query(startTime, endTime)
   const filtered = logs.filter((log) => {
     if (log.host !== host) return false
-    if (sourceIP && log.sourceIP !== sourceIP) return false
     return dimension === 'sourceIP'
       ? log.sourceIP === parentLabel
       : dimension === 'process'
@@ -261,13 +258,4 @@ export async function getTrafficTrend(
   return Array.from(buckets.entries())
     .map(([timestamp, data]) => ({ timestamp, ...data }))
     .sort((a, b) => a.timestamp - b.timestamp)
-}
-
-export async function getSourceIPs(startTime: number, endTime: number): Promise<string[]> {
-  const logs = await db.query(startTime, endTime)
-  const ips = new Set<string>()
-  for (const log of logs) {
-    ips.add(log.sourceIP)
-  }
-  return Array.from(ips).sort()
 }
