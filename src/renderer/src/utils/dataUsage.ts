@@ -10,10 +10,7 @@ export interface AggregatedData {
   count: number
 }
 
-function aggregateLogsByType(
-  logs: DataUsageLog[],
-  type: DataUsageType
-): AggregatedData[] {
+function aggregateLogsByType(logs: DataUsageLog[], type: DataUsageType): AggregatedData[] {
   const map = new Map<string, AggregatedData>()
 
   for (const log of logs) {
