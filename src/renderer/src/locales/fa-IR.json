@@ -388,6 +388,7 @@
   "traffic.search": "جستجو",
   "traffic.noData": "داده‌ای وجود ندارد",
   "traffic.clearAll": "پاک کردن همه داده‌ها",
+  "traffic.allDevices": "همه دستگاه‌ها",
   "sider.cards.outbound.title": "حالت خروجی",
   "sider.cards.outbound.rule": "قانون",
   "sider.cards.outbound.global": "جهانی",

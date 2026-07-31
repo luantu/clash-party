@@ -399,6 +399,7 @@
   "traffic.search": "Search",
   "traffic.noData": "No data",
   "traffic.clearAll": "Clear All Data",
+  "traffic.allDevices": "All Devices",
   "sider.cards.outbound.title": "Outbound Mode",
   "sider.cards.outbound.rule": "Rule",
   "sider.cards.outbound.global": "Global",

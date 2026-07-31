@@ -3,15 +3,16 @@ import TrafficRankings from '@renderer/components/traffic/traffic-rankings'
 import TrafficTrendChart from '@renderer/components/traffic/traffic-trend-chart'
 import TrafficDetailsTable from '@renderer/components/traffic/traffic-details-table'
 import {
-  getTrafficOverview,
+  getTrafficData,
   getSubStatsByHost,
   getDevicesByHost,
   getProxyStatsByHost,
+  getSourceIPs,
   type AggregatedData,
   type DataUsageType
 } from '@renderer/utils/dataUsage'
 import { db } from '@renderer/utils/db'
-import { Button, Tab, Tabs } from '@heroui/react'
+import { Button, Select, SelectItem, Spinner, Tab, Tabs } from '@heroui/react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { calcTraffic } from '@renderer/utils/calc'
@@ -20,7 +21,6 @@ import { CgTrash } from 'react-icons/cg'
 type TimeRange = '1h' | '24h' | '7d' | '30d'
 
 const TIME_RANGES: TimeRange[] = ['1h', '24h', '7d', '30d']
-const AUTO_REFRESH_INTERVAL_MS = 5000
 
 function getTimeRange(range: TimeRange): { start: number; end: number; bucketSizeMs: number } {
   const end = Date.now()
@@ -53,75 +53,63 @@ const TrafficPage: React.FC = () => {
   const [selectedSubRow, setSelectedSubRow] = useState<string | null>(null)
   const [totalStats, setTotalStats] = useState({ upload: 0, download: 0, total: 0, count: 0 })
   const [bucketSizeMs, setBucketSizeMs] = useState(60 * 60 * 1000)
-  const loadGenerationRef = useRef(0)
+  const [isLoading, setIsLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [expandingKey, setExpandingKey] = useState<string | null>(null)
-  const detailLoadIdRef = useRef(0)
+  const [sourceIPFilter, setSourceIPFilter] = useState<string>('')
+  const [sourceIPs, setSourceIPs] = useState<string[]>([])
+  const loadIdRef = useRef(0)
 
-  const load = useCallback(
-    async (
-      resetSelection = true,
-      generation = loadGenerationRef.current,
-      isCancelled: () => boolean = () => false
-    ) => {
-      const { start, end, bucketSizeMs: bms } = getTimeRange(timeRange)
-      const { rankings: agg, trend } = await getTrafficOverview(activeView, start, end, bms)
+  const load = useCallback(async () => {
+    const loadId = ++loadIdRef.current
+    setIsLoading(true)
 
-      if (isCancelled() || generation !== loadGenerationRef.current) return
+    const { start, end, bucketSizeMs: bms } = getTimeRange(timeRange)
+    setBucketSizeMs(bms)
+    const filterIP = sourceIPFilter || undefined
 
-      setBucketSizeMs(bms)
-      setRankings(agg)
-      setTrendData(trend)
-      setTotalStats(
-        agg.reduce(
-          (acc, r) => ({
-            upload: acc.upload + r.upload,
-            download: acc.download + r.download,
-            total: acc.total + r.total,
-            count: acc.count + r.count
-          }),
-          { upload: 0, download: 0, total: 0, count: 0 }
-        )
+    const [data, ips] = await Promise.all([
+      getTrafficData(activeView, start, end, bms, filterIP),
+      getSourceIPs(start, end)
+    ])
+
+    if (loadId !== loadIdRef.current) return
+
+    setRankings(data.rankings)
+    setTrendData(data.trend)
+    setSourceIPs(ips)
+    setTotalStats(
+      data.rankings.reduce(
+        (acc, r) => ({
+          upload: acc.upload + r.upload,
+          download: acc.download + r.download,
+          total: acc.total + r.total,
+          count: acc.count + r.count
+        }),
+        { upload: 0, download: 0, total: 0, count: 0 }
       )
+    )
 
-      if (resetSelection) {
-        setSelectedRow(null)
-        setSubStats([])
-        setProxyStatsMap({})
-        setSelectedSubRow(null)
-      }
-    },
-    [activeView, timeRange]
-  )
+    setSelectedRow(null)
+    setSubStats([])
+    setProxyStatsMap({})
+    setSelectedSubRow(null)
+    setIsLoading(false)
+  }, [activeView, timeRange, sourceIPFilter])
 
   useEffect(() => {
-    const generation = ++loadGenerationRef.current
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null
-    let cancelled = false
-
-    const refresh = async (resetSelection: boolean): Promise<void> => {
-      await load(resetSelection, generation, () => cancelled)
-      if (cancelled || generation !== loadGenerationRef.current) return
-      refreshTimer = setTimeout(() => {
-        void refresh(false)
-      }, AUTO_REFRESH_INTERVAL_MS)
-    }
-
-    void refresh(true)
-
-    return () => {
-      cancelled = true
-      if (refreshTimer !== null) {
-        clearTimeout(refreshTimer)
-      }
-    }
+    load()
   }, [load])
+
+  useEffect(() => {
+    if (activeView === 'sourceIP') {
+      setSourceIPFilter('')
+    }
+  }, [activeView])
 
   const handleSelectRow = useCallback(
     async (label: string) => {
       if (selectedRow === label) {
-        detailLoadIdRef.current += 1
-        setDetailLoading(false)
         setSelectedRow(null)
         setSubStats([])
         setProxyStatsMap({})
@@ -131,25 +119,20 @@ const TrafficPage: React.FC = () => {
       setSelectedRow(label)
       setSelectedSubRow(null)
       setProxyStatsMap({})
-      const detailLoadId = ++detailLoadIdRef.current
       setDetailLoading(true)
 
-      try {
-        const { start, end } = getTimeRange(timeRange)
-        const subs =
-          activeView === 'host'
-            ? await getDevicesByHost(label, start, end)
-            : await getSubStatsByHost(activeView, label, start, end)
-        if (detailLoadId === detailLoadIdRef.current) {
-          setSubStats(subs)
-        }
-      } finally {
-        if (detailLoadId === detailLoadIdRef.current) {
-          setDetailLoading(false)
-        }
+      const { start, end } = getTimeRange(timeRange)
+      const filterIP = sourceIPFilter || undefined
+      let subs: AggregatedData[]
+      if (activeView === 'host') {
+        subs = await getDevicesByHost(label, start, end)
+      } else {
+        subs = await getSubStatsByHost(activeView, label, start, end, filterIP)
       }
+      setSubStats(subs)
+      setDetailLoading(false)
     },
-    [selectedRow, activeView, timeRange]
+    [selectedRow, activeView, timeRange, sourceIPFilter]
   )
 
   const handleSubRowClick = useCallback(
@@ -162,16 +145,21 @@ const TrafficPage: React.FC = () => {
       setSelectedSubRow(compositeKey)
 
       if (proxyStatsMap[compositeKey]) return
-      const { start, end } = getTimeRange(timeRange)
       setExpandingKey(compositeKey)
-      try {
-        const proxies = await getProxyStatsByHost(activeView, parentLabel, subLabel, start, end)
-        setProxyStatsMap((prev) => ({ ...prev, [compositeKey]: proxies }))
-      } finally {
-        setExpandingKey((current) => (current === compositeKey ? null : current))
-      }
+      const { start, end } = getTimeRange(timeRange)
+      const filterIP = sourceIPFilter || undefined
+      const proxies = await getProxyStatsByHost(
+        activeView,
+        parentLabel,
+        subLabel,
+        start,
+        end,
+        filterIP
+      )
+      setProxyStatsMap((prev) => ({ ...prev, [compositeKey]: proxies }))
+      setExpandingKey(null)
     },
-    [selectedSubRow, proxyStatsMap, activeView, timeRange]
+    [selectedSubRow, proxyStatsMap, activeView, timeRange, sourceIPFilter]
   )
 
   const handleClearAll = useCallback(async () => {
@@ -220,7 +208,12 @@ const TrafficPage: React.FC = () => {
         </div>
       }
     >
-      <div className="flex flex-col gap-3 p-2">
+      <div className="relative flex flex-col gap-3 p-2">
+        {isLoading && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center rounded-xl bg-background/60 backdrop-blur-[2px]">
+            <Spinner size="lg" />
+          </div>
+        )}
         {/* Summary stats */}
         <div className="grid grid-cols-4 gap-2">
           {[
@@ -240,6 +233,23 @@ const TrafficPage: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/* Source IP filter */}
+        {activeView !== 'sourceIP' && (
+          <Select
+            size="sm"
+            className="w-44"
+            placeholder={t('traffic.allDevices')}
+            selectedKeys={sourceIPFilter ? [sourceIPFilter] : []}
+            onSelectionChange={(keys) => {
+              const selected = Array.from(keys as Set<string>)[0] || ''
+              setSourceIPFilter(selected)
+            }}
+            items={sourceIPs.map((ip) => ({ key: ip, label: ip }))}
+          >
+            {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
+          </Select>
+        )}
 
         {/* View tabs */}
         <Tabs

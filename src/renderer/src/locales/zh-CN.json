@@ -399,6 +399,7 @@
   "traffic.search": "搜索",
   "traffic.noData": "暂无数据",
   "traffic.clearAll": "清除所有数据",
+  "traffic.allDevices": "全部设备",
   "sider.cards.outbound.title": "出站模式",
   "sider.cards.outbound.rule": "规则",
   "sider.cards.outbound.global": "全局",
