@@ -378,13 +378,13 @@ jobs:
           chmod +x build/pkg-scripts/postinstall build/pkg-scripts/preinstall
           pnpm build:mac --${{ matrix.arch }} --config.mac.target=zip --config.mac.hardenedRuntime=false --config.mac.notarize=false
       - name: Setup temporary installer signing keychain
-        if: ${{ secrets.CSC_INSTALLER_LINK != '' }}
+        if: github.repository == 'mihomo-party-org/clash-party'
         uses: apple-actions/import-codesign-certs@v6
         with:
           p12-file-base64: ${{ secrets.CSC_INSTALLER_LINK }}
           p12-password: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
       - name: Sign the Apple pkg
-        if: ${{ secrets.CSC_INSTALLER_LINK != '' }}
+        if: github.repository == 'mihomo-party-org/clash-party'
         run: |
           for pkg_name in $(ls -1 dist/*.pkg); do
             pkg_name=$(ls -1 dist/*.pkg)
@@ -477,13 +477,13 @@ jobs:
           chmod +x build/pkg-scripts/postinstall build/pkg-scripts/preinstall
           pnpm build:mac --${{ matrix.arch }} --config.mac.target=zip --config.mac.hardenedRuntime=false --config.mac.notarize=false
       - name: Setup temporary installer signing keychain
-        if: ${{ secrets.CSC_INSTALLER_LINK != '' }}
+        if: github.repository == 'mihomo-party-org/clash-party'
         uses: apple-actions/import-codesign-certs@v6
         with:
           p12-file-base64: ${{ secrets.CSC_INSTALLER_LINK }}
           p12-password: ${{ secrets.CSC_INSTALLER_KEY_PASSWORD }}
       - name: Sign the Apple pkg
-        if: ${{ secrets.CSC_INSTALLER_LINK != '' }}
+        if: github.repository == 'mihomo-party-org/clash-party'
         run: |
           for pkg_name in $(ls -1 dist/*.pkg); do
             pkg_name=$(ls -1 dist/*.pkg)
@@ -555,18 +555,28 @@ jobs:
           GITHUB_EVENT_NAME: workflow_dispatch
         run: node scripts/update-version.mjs
       - name: Telegram Notification
-        if: startsWith(github.ref, 'refs/tags/v') && secrets.TELEGRAM_BOT_TOKEN != ''
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           RELEASE_TYPE: release
-        run: pnpm telegram
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "Skipping: TELEGRAM_BOT_TOKEN not configured"
+            exit 0
+          fi
+          pnpm telegram
       - name: Telegram Dev Notification
-        if: github.event_name == 'workflow_dispatch' && secrets.TELEGRAM_BOT_TOKEN != ''
+        if: github.event_name == 'workflow_dispatch'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           GITHUB_SHA: ${{ github.sha }}
           RELEASE_TYPE: dev
-        run: pnpm telegram:dev
+        run: |
+          if [ -z "$TELEGRAM_BOT_TOKEN" ]; then
+            echo "Skipping: TELEGRAM_BOT_TOKEN not configured"
+            exit 0
+          fi
+          pnpm telegram:dev
       - name: Generate latest.yml
         run: pnpm updater
       - name: Publish Release
