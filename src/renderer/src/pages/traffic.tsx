@@ -7,11 +7,12 @@ import {
   getSubStatsByHost,
   getDevicesByHost,
   getProxyStatsByHost,
+  getSourceIPs,
   type AggregatedData,
   type DataUsageType
 } from '@renderer/utils/dataUsage'
 import { db } from '@renderer/utils/db'
-import { Button, Spinner, Tab, Tabs } from '@heroui/react'
+import { Button, Select, SelectItem, Spinner, Tab, Tabs } from '@heroui/react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { calcTraffic } from '@renderer/utils/calc'
@@ -55,6 +56,8 @@ const TrafficPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [detailLoading, setDetailLoading] = useState(false)
   const [expandingKey, setExpandingKey] = useState<string | null>(null)
+  const [sourceIPFilter, setSourceIPFilter] = useState<string>('')
+  const [sourceIPs, setSourceIPs] = useState<string[]>([])
   const loadIdRef = useRef(0)
 
   const load = useCallback(async () => {
@@ -63,13 +66,18 @@ const TrafficPage: React.FC = () => {
 
     const { start, end, bucketSizeMs: bms } = getTimeRange(timeRange)
     setBucketSizeMs(bms)
+    const filterIP = sourceIPFilter || undefined
 
-    const data = await getTrafficData(activeView, start, end, bms)
+    const [data, ips] = await Promise.all([
+      getTrafficData(activeView, start, end, bms, filterIP),
+      getSourceIPs(start, end)
+    ])
 
     if (loadId !== loadIdRef.current) return
 
     setRankings(data.rankings)
     setTrendData(data.trend)
+    setSourceIPs(ips)
     setTotalStats(
       data.rankings.reduce(
         (acc, r) => ({
@@ -87,11 +95,17 @@ const TrafficPage: React.FC = () => {
     setProxyStatsMap({})
     setSelectedSubRow(null)
     setIsLoading(false)
-  }, [activeView, timeRange])
+  }, [activeView, timeRange, sourceIPFilter])
 
   useEffect(() => {
     load()
   }, [load])
+
+  useEffect(() => {
+    if (activeView === 'sourceIP') {
+      setSourceIPFilter('')
+    }
+  }, [activeView])
 
   const handleSelectRow = useCallback(
     async (label: string) => {
@@ -108,16 +122,17 @@ const TrafficPage: React.FC = () => {
       setDetailLoading(true)
 
       const { start, end } = getTimeRange(timeRange)
+      const filterIP = sourceIPFilter || undefined
       let subs: AggregatedData[]
       if (activeView === 'host') {
         subs = await getDevicesByHost(label, start, end)
       } else {
-        subs = await getSubStatsByHost(activeView, label, start, end)
+        subs = await getSubStatsByHost(activeView, label, start, end, filterIP)
       }
       setSubStats(subs)
       setDetailLoading(false)
     },
-    [selectedRow, activeView, timeRange]
+    [selectedRow, activeView, timeRange, sourceIPFilter]
   )
 
   const handleSubRowClick = useCallback(
@@ -132,11 +147,19 @@ const TrafficPage: React.FC = () => {
       if (proxyStatsMap[compositeKey]) return
       setExpandingKey(compositeKey)
       const { start, end } = getTimeRange(timeRange)
-      const proxies = await getProxyStatsByHost(activeView, parentLabel, subLabel, start, end)
+      const filterIP = sourceIPFilter || undefined
+      const proxies = await getProxyStatsByHost(
+        activeView,
+        parentLabel,
+        subLabel,
+        start,
+        end,
+        filterIP
+      )
       setProxyStatsMap((prev) => ({ ...prev, [compositeKey]: proxies }))
       setExpandingKey(null)
     },
-    [selectedSubRow, proxyStatsMap, activeView, timeRange]
+    [selectedSubRow, proxyStatsMap, activeView, timeRange, sourceIPFilter]
   )
 
   const handleClearAll = useCallback(async () => {
@@ -210,6 +233,23 @@ const TrafficPage: React.FC = () => {
             </div>
           ))}
         </div>
+
+        {/* Source IP filter */}
+        {activeView !== 'sourceIP' && (
+          <Select
+            size="sm"
+            className="w-44"
+            placeholder={t('traffic.allDevices')}
+            selectedKeys={sourceIPFilter ? [sourceIPFilter] : []}
+            onSelectionChange={(keys) => {
+              const selected = Array.from(keys as Set<string>)[0] || ''
+              setSourceIPFilter(selected)
+            }}
+            items={sourceIPs.map((ip) => ({ key: ip, label: ip }))}
+          >
+            {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
+          </Select>
+        )}
 
         {/* View tabs */}
         <Tabs
