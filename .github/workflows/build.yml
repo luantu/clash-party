@@ -376,7 +376,7 @@ jobs:
           npm_config_target_arch: ${{ matrix.arch }}
         run: |
           chmod +x build/pkg-scripts/postinstall build/pkg-scripts/preinstall
-          pnpm build:mac --${{ matrix.arch }} --config.mac.target=zip --config.mac.hardenedRuntime=false --config.mac.notarize=false
+          pnpm build:mac --${{ matrix.arch }} -c.mac.target=zip -c.mac.hardenedRuntime=false -c.mac.notarize=false
       - name: Setup temporary installer signing keychain
         if: github.repository == 'mihomo-party-org/clash-party'
         uses: apple-actions/import-codesign-certs@v6
@@ -475,7 +475,7 @@ jobs:
         run: |
           sed -i "" -e "s/macos/catalina/" electron-builder.yml
           chmod +x build/pkg-scripts/postinstall build/pkg-scripts/preinstall
-          pnpm build:mac --${{ matrix.arch }} --config.mac.target=zip --config.mac.hardenedRuntime=false --config.mac.notarize=false
+          pnpm build:mac --${{ matrix.arch }} -c.mac.target=zip -c.mac.hardenedRuntime=false -c.mac.notarize=false
       - name: Setup temporary installer signing keychain
         if: github.repository == 'mihomo-party-org/clash-party'
         uses: apple-actions/import-codesign-certs@v6
