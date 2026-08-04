@@ -7,12 +7,11 @@ import {
   getSubStatsByHost,
   getDevicesByHost,
   getProxyStatsByHost,
-  getSourceIPs,
   type AggregatedData,
   type DataUsageType
 } from '@renderer/utils/dataUsage'
 import { db } from '@renderer/utils/db'
-import { Button, Select, SelectItem, Spinner, Tab, Tabs } from '@heroui/react'
+import { Button, Spinner, Tab, Tabs } from '@heroui/react'
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { calcTraffic } from '@renderer/utils/calc'
@@ -54,10 +53,6 @@ const TrafficPage: React.FC = () => {
   const [totalStats, setTotalStats] = useState({ upload: 0, download: 0, total: 0, count: 0 })
   const [bucketSizeMs, setBucketSizeMs] = useState(60 * 60 * 1000)
   const [isLoading, setIsLoading] = useState(false)
-  const [detailLoading, setDetailLoading] = useState(false)
-  const [expandingKey, setExpandingKey] = useState<string | null>(null)
-  const [sourceIPFilter, setSourceIPFilter] = useState<string>('')
-  const [sourceIPs, setSourceIPs] = useState<string[]>([])
   const loadIdRef = useRef(0)
 
   const load = useCallback(async () => {
@@ -66,18 +61,13 @@ const TrafficPage: React.FC = () => {
 
     const { start, end, bucketSizeMs: bms } = getTimeRange(timeRange)
     setBucketSizeMs(bms)
-    const filterIP = sourceIPFilter || undefined
 
-    const [data, ips] = await Promise.all([
-      getTrafficData(activeView, start, end, bms, filterIP),
-      getSourceIPs(start, end)
-    ])
+    const data = await getTrafficData(activeView, start, end, bms)
 
     if (loadId !== loadIdRef.current) return
 
     setRankings(data.rankings)
     setTrendData(data.trend)
-    setSourceIPs(ips)
     setTotalStats(
       data.rankings.reduce(
         (acc, r) => ({
@@ -95,17 +85,11 @@ const TrafficPage: React.FC = () => {
     setProxyStatsMap({})
     setSelectedSubRow(null)
     setIsLoading(false)
-  }, [activeView, timeRange, sourceIPFilter])
+  }, [activeView, timeRange])
 
   useEffect(() => {
     load()
   }, [load])
-
-  useEffect(() => {
-    if (activeView === 'sourceIP') {
-      setSourceIPFilter('')
-    }
-  }, [activeView])
 
   const handleSelectRow = useCallback(
     async (label: string) => {
@@ -119,20 +103,17 @@ const TrafficPage: React.FC = () => {
       setSelectedRow(label)
       setSelectedSubRow(null)
       setProxyStatsMap({})
-      setDetailLoading(true)
 
       const { start, end } = getTimeRange(timeRange)
-      const filterIP = sourceIPFilter || undefined
       let subs: AggregatedData[]
       if (activeView === 'host') {
         subs = await getDevicesByHost(label, start, end)
       } else {
-        subs = await getSubStatsByHost(activeView, label, start, end, filterIP)
+        subs = await getSubStatsByHost(activeView, label, start, end)
       }
       setSubStats(subs)
-      setDetailLoading(false)
     },
-    [selectedRow, activeView, timeRange, sourceIPFilter]
+    [selectedRow, activeView, timeRange]
   )
 
   const handleSubRowClick = useCallback(
@@ -145,21 +126,11 @@ const TrafficPage: React.FC = () => {
       setSelectedSubRow(compositeKey)
 
       if (proxyStatsMap[compositeKey]) return
-      setExpandingKey(compositeKey)
       const { start, end } = getTimeRange(timeRange)
-      const filterIP = sourceIPFilter || undefined
-      const proxies = await getProxyStatsByHost(
-        activeView,
-        parentLabel,
-        subLabel,
-        start,
-        end,
-        filterIP
-      )
+      const proxies = await getProxyStatsByHost(activeView, parentLabel, subLabel, start, end)
       setProxyStatsMap((prev) => ({ ...prev, [compositeKey]: proxies }))
-      setExpandingKey(null)
     },
-    [selectedSubRow, proxyStatsMap, activeView, timeRange, sourceIPFilter]
+    [selectedSubRow, proxyStatsMap, activeView, timeRange]
   )
 
   const handleClearAll = useCallback(async () => {
@@ -234,23 +205,6 @@ const TrafficPage: React.FC = () => {
           ))}
         </div>
 
-        {/* Source IP filter */}
-        {activeView !== 'sourceIP' && (
-          <Select
-            size="sm"
-            className="w-44"
-            placeholder={t('traffic.allDevices')}
-            selectedKeys={sourceIPFilter ? [sourceIPFilter] : []}
-            onSelectionChange={(keys) => {
-              const selected = Array.from(keys as Set<string>)[0] || ''
-              setSourceIPFilter(selected)
-            }}
-            items={sourceIPs.map((ip) => ({ key: ip, label: ip }))}
-          >
-            {(item) => <SelectItem key={item.key}>{item.label}</SelectItem>}
-          </Select>
-        )}
-
         {/* View tabs */}
         <Tabs
           size="sm"
@@ -286,8 +240,6 @@ const TrafficPage: React.FC = () => {
             proxyStatsMap={proxyStatsMap}
             selectedSubRow={selectedSubRow}
             onSubRowClick={handleSubRowClick}
-            isLoading={detailLoading}
-            expandingKey={expandingKey}
           />
         )}
       </div>
