@@ -212,13 +212,9 @@ const TrafficDetailsTable: React.FC<Props> = ({
                   )
                 })}
                 {paged.length === 0 && (
-                  <tr>
-                    <td colSpan={4}>
-                      <div className="flex items-center justify-center py-12 text-sm text-foreground/40 italic">
-                        {t('traffic.noData')}
-                      </div>
-                    </td>
-                  </tr>
+                  <div className="flex items-center justify-center py-12 text-sm text-foreground/40 italic">
+                    {t('traffic.noData')}
+                  </div>
                 )}
               </>
             )}

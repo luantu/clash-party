@@ -256,3 +256,12 @@ export async function getTrafficTrend(
     .map(([timestamp, data]) => ({ timestamp, ...data }))
     .sort((a, b) => a.timestamp - b.timestamp)
 }
+
+export async function getSourceIPs(startTime: number, endTime: number): Promise<string[]> {
+  const logs = await db.query(startTime, endTime)
+  const ips = new Set<string>()
+  for (const log of logs) {
+    ips.add(log.sourceIP)
+  }
+  return Array.from(ips).sort()
+}
